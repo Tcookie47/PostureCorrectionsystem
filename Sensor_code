@@ -1,0 +1,119 @@
+#include <Wire.h>
+#include <MPU6050.h>
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+int trigPin = 2;    // Trigger
+int echoPin = 4;    // Echo
+int mot = 6;
+long duration, cm; 
+RF24 radio(9, 10); // CE, CSN
+const byte address[6] = "00006";
+int i=0;
+
+MPU6050 mpu;
+float yaw = 0;
+float timeStep = 0.01;
+
+void setup() {
+  Serial.begin(9600);
+
+  Serial.println("Initialize MPU6050");
+
+  while(!mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G))
+  {
+    Serial.println("Could not find a valid MPU6050 sensor, check wiring!");
+    //delay(500);
+  }
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(mot, OUTPUT);
+  
+  mpu.calibrateGyro();
+  
+  radio.begin();
+  radio.openWritingPipe(address);
+  radio.setPALevel(RF24_PA_MIN);
+  radio.stopListening();
+}
+
+void loop()
+{
+  static char bad[20] = "BAD";
+  static char good[20] = "GOOD";
+  for (int i = 0; i <= 1000000; i++) 
+  {
+    if(i%2 == 0)
+    {
+      Vector normAccel = mpu.readNormalizeAccel();
+      // Calculate Pitch & Roll
+      int pitch = -(atan2(normAccel.XAxis, sqrt(normAccel.YAxis*normAccel.YAxis + normAccel.ZAxis*normAccel.ZAxis))*180.0)/M_PI;
+      int roll = (atan2(normAccel.YAxis, normAccel.ZAxis)*180.0)/M_PI;
+      float temp = mpu.readTemperature();
+      Vector norm = mpu.readNormalizeGyro();
+      int yaw = yaw + norm.ZAxis * timeStep;
+      if(pitch > -60)
+      {
+        digitalWrite(mot, HIGH);
+        //radio.write(&bad, sizeof(bad));
+        //Serial.print("Transmitting Bad : ");
+        Serial.println(bad);  
+      }
+      else if (roll > 35 || roll <- 35)
+      {
+        digitalWrite(mot, HIGH);
+        //radio.write(&bad, sizeof(bad));
+        //Serial.print("Transmitting Bad : ");
+        Serial.println(bad);
+      }
+      else
+      {
+        digitalWrite(mot, LOW);
+        //radio.write(&good, sizeof(good));
+        //Serial.print("Transmitting Good : ");
+        Serial.println(good);
+      }
+      
+      //Serial.print(" Pitch = ");
+      //Serial.print(pitch);
+      //Serial.print(" Roll = ");
+      //Serial.print(roll);
+      //Serial.print(" Yaw = ");
+      //Serial.print(yaw);
+      //Serial.println();
+      delay(1000);
+    }
+    else
+    {
+    
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(5);
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
+    pinMode(echoPin, INPUT);
+    duration = pulseIn(echoPin, HIGH);
+    float cm = (duration/2) / 29.1545;     // Divide by 29.1 or multiply by 0.0343
+  //inches = (duration/2) / 74;   // Divide by 74 or multiply by 0.0135
+    if(cm > 50)
+    {
+      digitalWrite(mot, LOW);
+      //radio.write(&good, sizeof(good));
+      //Serial.print("Transmitting Good : ");
+      Serial.println(good);
+    }
+    else if(cm <50 && cm > 13)
+    {
+      digitalWrite(mot, HIGH);
+      //radio.write(&bad, sizeof(bad));
+      //Serial.print("Transmitting Bad : ");
+      Serial.println(bad);
+    }
+    //Serial.print(" The Distance is ");
+    //Serial.print(cm);
+    //Serial.print("cm");
+    //Serial.println();
+    delay(1000);
+    }
+  }
+  }   
